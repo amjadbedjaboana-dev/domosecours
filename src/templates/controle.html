@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contrôle AlphaBot2 + Flux Vidéo</title>
+    <style>
+        body { text-align: center; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f4f8; color: #333; margin: 20px; }
+        h1 { color: #1976d2; margin-bottom: 30px; }
+        .video-feed-container {
+            margin-bottom: 30px;
+            border: 3px solid #1976d2;
+            border-radius: 8px;
+            overflow: hidden; /* Assure que le border-radius s'applique */
+            display: inline-block; /* Pour centrer le bloc */
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+        }
+        .video-feed-container img {
+            display: block; /* Supprime l'espace sous l'image */
+            width: 640px; /* Taille fixe pour la vidéo */
+            height: 480px;
+        }
+        .controls {
+            margin-bottom: 30px;
+        }
+        .controls button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 25px;
+            margin: 8px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1.1em;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            min-width: 120px; /* Pour une taille uniforme */
+        }
+        .controls button:hover {
+            background-color: #45a049;
+            transform: translateY(-2px);
+        }
+        .navigation-buttons {
+            margin-top: 30px;
+            display: flex;
+            justify-content: center;
+            gap: 15px; /* Espace entre les boutons */
+        }
+        .navigation-buttons button {
+            background-color: #607d8b;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.95em;
+            transition: background-color 0.3s ease;
+        }
+        .navigation-buttons button:hover {
+            background-color: #455a64;
+        }
+        .error-message {
+            color: #d32f2f;
+            background-color: #ffebee;
+            border: 1px solid #ef9a9a;
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <h1>Contrôle AlphaBot2 + Flux Vidéo</h1>
+
+    {% if camera_error %}
+        <p class="error-message">{{ camera_error }}</p>
+    {% else %}
+        <div class="video-feed-container">
+            <img src="{{ url_for('video_feed') }}" alt="Flux Vidéo du Robot">
+        </div>
+    {% endif %}
+
+    <div class="controls">
+        <button onclick="sendCommand('forward')">Avancer</button><br>
+        <button onclick="sendCommand('left')">Gauche</button>
+        <button onclick="sendCommand('stop')">Stop</button>
+        <button onclick="sendCommand('right')">Droite</button><br>
+        <button onclick="sendCommand('backward')">Reculer</button>
+    </div>
+
+    <div class="navigation-buttons">
+        <button onclick="location.href='{{ url_for('login') }}'">Retour au Login</button>
+        <button onclick="location.href='{{ url_for('trame_page') }}'">Retour à la Trame</button>
+    </div>
+
+    <script>
+        function sendCommand(cmd) {
+            fetch('/control/' + cmd, { method: 'POST' })
+                .then(response => {
+                    if (!response.ok) {
+                        console.error('Erreur lors de l\'envoi de la commande:', response.statusText);
+                    }
+                })
+                .catch(error => console.error('Erreur réseau lors de l\'envoi de la commande:', error));
+        }
+
+        let lastCmd = 'stop';
+        window.addEventListener("gamepadconnected", function(e) {
+            console.log("Manette connectée:", e.gamepad);
+            // Empêche la connexion multiple d'intervalle si plusieurs manettes se connectent
+            if (!this.gamepadInterval) {
+                this.gamepadInterval = setInterval(() => {
+                    const gp = navigator.getGamepads()[0]; // Prend toujours la première manette
+                    if (!gp) {
+                        // console.log("Manette déconnectée");
+                        // clearInterval(this.gamepadInterval);
+                        // this.gamepadInterval = null;
+                        return;
+                    }
+
+                    const x = gp.axes[0]; // Axe horizontal du stick gauche
+                    const y = gp.axes[1]; // Axe vertical du stick gauche
+                    const threshold = 0.4; // Seuil pour détecter un mouvement significatif
+
+                    let cmd = 'stop';
+                    if (y < -threshold) cmd = 'forward';
+                    else if (y > threshold) cmd = 'backward';
+                    else if (x < -threshold) cmd = 'left';
+                    else if (x > threshold) cmd = 'right';
+
+                    // Envoyer la commande uniquement si elle a changé
+                    if (cmd !== lastCmd) {
+                        sendCommand(cmd);
+                        lastCmd = cmd;
+                    }
+                }, 100); // Vérifier l'état de la manette toutes les 100 ms
+            }
+        });
+
+        // Gérer la déconnexion de la manette
+        window.addEventListener("gamepaddisconnected", function(e) {
+            console.log("Manette déconnectée:", e.gamepad);
+            if (this.gamepadInterval) {
+                clearInterval(this.gamepadInterval);
+                this.gamepadInterval = null;
+                sendCommand('stop'); // Arrêter le robot en cas de déconnexion
+            }
+            lastCmd = 'stop'; // Réinitialiser la dernière commande
+        });
+    </script>
+</body>
+</html>
